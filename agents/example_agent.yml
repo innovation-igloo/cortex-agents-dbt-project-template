@@ -1,0 +1,58 @@
+# TODO: Customize this agent specification for your use case.
+# This file is read by the create_agent and alter_agent macros.
+# See: https://docs.snowflake.com/en/sql-reference/sql/create-agent
+
+models:
+  orchestration: auto     # 'auto' lets Snowflake pick the best model
+
+orchestration:
+  budget:
+    seconds: 30           # Max time per request
+    tokens: 16000         # Max orchestration tokens per request
+
+instructions:
+  response: >
+    TODO: Describe how the agent should respond.
+    Example: You are a data analyst assistant. Provide clear, data-driven
+    answers. Always cite specific numbers and dates in your responses.
+  orchestration: >
+    TODO: Describe how the agent should route between tools.
+    Example: For quantitative questions about orders and inventory, use the
+    Analyst tool. For questions about business definitions or policies, use
+    the Search tool.
+  sample_questions:
+    - question: "TODO: Add a sample question for Cortex Analyst"
+    - question: "TODO: Add a sample question for Cortex Search"
+    - question: "TODO: Add a question that uses both tools"
+
+tools:
+  - tool_spec:
+      type: "cortex_analyst_text_to_sql"
+      name: "Analyst"
+      # Tool descriptions are CRITICAL for routing accuracy.
+      # Be explicit about what this tool does AND does not do.
+      description: >
+        TODO: Describe what structured data this tool queries.
+        Example: Queries structured order, inventory, and product data to
+        answer questions about revenue, demand, and fulfillment metrics.
+        Do NOT use for questions about business definitions or policies.
+
+  # Uncomment to add a Cortex Search tool:
+  # - tool_spec:
+  #     type: "cortex_search"
+  #     name: "Search"
+  #     description: >
+  #       Searches business documentation for definitions, policies, and
+  #       terminology. Do NOT use for numeric queries.
+
+tool_resources:
+  Analyst:
+    # TODO: Replace with your semantic view's fully-qualified name.
+    # This will resolve to {target.database}.{target.schema}.SV_EXAMPLE
+    # after you build and deploy.
+    semantic_view: "DEV_DB.CORTEX_AGENTS.SV_EXAMPLE"
+
+  # Uncomment to configure the Search tool:
+  # Search:
+  #   name: "DEV_DB.CORTEX_AGENTS.MY_SEARCH_SERVICE"
+  #   max_results: "5"

@@ -1,0 +1,24 @@
+name: cortex_agent_lifecycle
+version: '1.0.0'
+config-version: 2
+
+profile: cortex_agent_lifecycle
+
+model-paths: ["models"]
+macro-paths: ["macros"]
+seed-paths: ["seeds"]
+test-paths: ["tests"]
+analysis-paths: ["analyses"]
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+models:
+  cortex_agent_lifecycle:
+    staging:
+      +materialized: view
+    semantic_views:
+      +materialized: semantic_view
+    evaluations:
+      +materialized: table

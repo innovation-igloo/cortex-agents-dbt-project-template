@@ -1,0 +1,25 @@
+# Snowflake Workspace Profile
+# account and user can be left empty — dbt runs under the current Snowflake session context.
+# Update database, schema, warehouse, and role to match your environment.
+
+cortex_agent_lifecycle:
+  target: dev
+  outputs:
+    dev:
+      type: snowflake
+      account: ''
+      user: ''
+      role: SYSADMIN            # TODO: Replace with your role
+      database: DEV_DB          # TODO: Replace with your dev database
+      schema: CORTEX_AGENTS     # TODO: Replace with your dev schema
+      warehouse: ANALYTICS_WH   # TODO: Replace with your warehouse
+      threads: 4
+    prod:
+      type: snowflake
+      account: ''
+      user: ''
+      role: SYSADMIN            # TODO: Replace with your role
+      database: PROD_DB         # TODO: Replace with your prod database
+      schema: CORTEX_AGENTS     # TODO: Replace with your prod schema
+      warehouse: ANALYTICS_WH   # TODO: Replace with your warehouse
+      threads: 4

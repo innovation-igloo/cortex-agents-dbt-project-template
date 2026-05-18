@@ -1,0 +1,5 @@
+version: 2
+
+models:
+  - name: sv_example
+    description: "TODO: Describe your semantic view — what business domain does it cover?"
