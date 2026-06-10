@@ -35,6 +35,21 @@ TABLES (
 --   --   orders (product_id) REFERENCES products
 -- )
 
+-- FACTS (
+--   -- TODO: Define row-level expressions that metrics aggregate over.
+--   -- A fact is evaluated per row (NOT aggregated); metrics then SUM/AVG/COUNT
+--   -- the facts. The FACTS clause must appear BEFORE DIMENSIONS and METRICS.
+--   -- Example:
+--   -- orders.order_value AS order_total
+--   --   COMMENT = 'Per-order revenue amount, before aggregation',
+--   --
+--   -- orders.is_fulfilled AS IFF(status = 'Fulfilled', 1, 0)
+--   --   COMMENT = 'Row-level 1/0 flag used to compute fulfillment rate',
+--   --
+--   -- line_items.discounted_price AS l_extendedprice * (1 - l_discount)
+--   --   COMMENT = 'Extended price after discount'
+-- )
+
 -- DIMENSIONS (
 --   -- TODO: Define dimensions users will filter and group by.
 --   -- Example:
