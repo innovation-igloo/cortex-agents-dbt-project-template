@@ -1109,12 +1109,35 @@ ALTER TASK daily_cortex_build RESUME;</code></pre>
         <td>Embedded in a portal, Streamlit app, or internal tool</td>
         <td>Call the Cortex Agents REST API; MCP server available for local dev</td>
       </tr>
+      <tr>
+        <td><strong>Cortex Agent REST API</strong></td>
+        <td>Programmatic access from any language, backend service, or batch job</td>
+        <td>POST to the <code>agents/&lt;name&gt;:run</code> endpoint with a PAT or OAuth token</td>
+      </tr>
     </tbody>
   </table>
 
+  <h2>Calling the Cortex Agent REST API</h2>
+  <p>Every Cortex Agent object is automatically callable over REST — it is the lowest-level surface, and the same endpoint that Snowflake Intelligence, Teams, and MCP all sit on top of. Any language or service that can make an authenticated HTTPS request can drive the agent directly, which makes it the right choice for embedding the agent in backend services, scheduled jobs, or a custom front end.</p>
+<pre><code class="language-bash">curl -X POST \
+  "https://&lt;account&gt;.snowflakecomputing.com/api/v2/databases/DEV_DB/schemas/CORTEX_AGENTS/agents/EXAMPLE_AGENT:run" \
+  -H "Authorization: Bearer $SNOWFLAKE_PAT" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "messages": [
+      { "role": "user",
+        "content": [ { "type": "text", "text": "What were total sales last month?" } ] }
+    ]
+  }'</code></pre>
+
+  <div class="callout callout-info">
+    <h4>Authentication and streaming</h4>
+    <p>Authenticate with a Programmatic Access Token (PAT) or OAuth bearer token scoped to a role that has <code>USAGE</code> on the agent. The endpoint streams its response as server-sent events (SSE), so your client can render the agent's reasoning, tool calls, and final answer incrementally rather than waiting for the full payload.</p>
+  </div>
+
   <div class="callout callout-key">
     <h4>The agent object is the integration point</h4>
-    <p>All three surfaces call the same underlying Cortex Agent object — changes to instructions, tools, or the semantic view propagate everywhere automatically on the next <code>alter_agent</code> run. No surface-specific configuration is needed when you update the agent.</p>
+    <p>All of these surfaces call the same underlying Cortex Agent object — changes to instructions, tools, or the semantic view propagate everywhere automatically on the next <code>alter_agent</code> run. No surface-specific configuration is needed when you update the agent.</p>
   </div>
 
 </section>
