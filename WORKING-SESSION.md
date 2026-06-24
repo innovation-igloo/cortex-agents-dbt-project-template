@@ -135,58 +135,117 @@ dbt build --select sv_<name>
 
 ## Phase 2 — Agent Reasoning → Orchestration
 
-**Goal:** Define how the agent reasons and routes between tools.
+**Goal:** Define how the agent plans and routes between tools. This is the highest-impact accuracy lever after tool descriptions.
 
 > Phases 2–4 all author into the **same file**: `agents/<agent_name>.yml`.
 > The agent object is created once at the **end of Phase 4** — that is the single create gate.
 
 Coco asks:
-- "How should the agent work through reasoning? When should it use each tool vs. answer directly?"
-- Gate: "Should I **infer** the orchestration logic from your questions/tools, or will you **specify** it?"
+- "Walk me through the main question types this agent will face — which tool should handle each one?"
+- "Are there multi-step flows where the agent needs to chain tool calls or call them in parallel?"
+- "What should the agent say when data is unavailable, results are empty, or a question is ambiguous?"
+- Gate: "Should I **infer** the orchestration logic from your questions and tools, or will you **specify** it?"
 
 Files Coco edits (in `agents/<agent_name>.yml`):
-- `instructions.orchestration` — routing/reasoning guidance
+- `instructions.orchestration` — the agent's planning and routing rules
 - `orchestration.budget` — `seconds` / `tokens` if non-default
 - `models.orchestration` — leave `auto` unless told otherwise
 
+What belongs in `instructions.orchestration`:
+- Tool selection logic — which tool handles which question type
+- Data retrieval rules — time windows, default filters ("when user says 'recent', use last 30 days")
+- User intent interpretation — how to disambiguate vague questions
+- Tool call sequencing — which tools to run in order vs. in parallel
+- Conditional logic — "if result > 100 rows, aggregate before displaying"
+- Error and edge case handling — what to say when data is unavailable, empty, or ambiguous
+
+What does NOT belong here (put these in `instructions.response` instead):
+- Tone, formatting, chart rendering, table/bullet preferences, disclaimers
+
+> Rule of thumb: if the instruction affects WHAT the agent does or WHICH tool it picks, it goes in
+> orchestration. If it affects HOW the output looks, it goes in response.
+
+> Keep instructions concise — if a coworker couldn't follow them, neither can the LLM.
+> Use agent monitoring traces to diagnose routing failures and refine iteratively.
+
 **Materialize gate:** none yet — continue to Phase 3. (Object is created at end of Phase 4.)
 
-**Done when:** the orchestration block reflects the agreed reasoning strategy.
+**Done when:** the orchestration block covers all major question types, error scenarios, and routing rules.
 
 ---
 
 ## Phase 3 — Agent Response → Response Instructions
 
-**Goal:** Define how the agent talks to users.
+**Goal:** Define how the agent formats and communicates its answers — completely separate from tool routing.
 
 Coco asks:
-- "How should the agent respond — tone, format, level of detail, citations?"
-- Gate: "Should I **infer** the response style from the use case, or will you **specify** it?"
+- "Who is the primary audience? (executives, analysts, ops teams, etc.)"
+- "What format do users expect — tables, bullets, charts, plain prose?"
+- "Are there legal/compliance topics that need a disclaimer appended to answers?"
+- Gate: "Should I **infer** the response style from the use case and audience, or will you **specify** it?"
 
 Files Coco edits (in `agents/<agent_name>.yml`):
-- `instructions.response` — response style and rules
+- `instructions.response` — response style, format, and communication rules
 - `instructions.sample_questions` — 3+ representative starter questions
+
+What belongs in `instructions.response`:
+- **Tone** — "Be concise and professional. Lead with the direct answer, then supporting details.
+  Avoid hedging language like 'it seems' — be direct with data."
+- **Data presentation** — "Use tables for multi-row data (>3 items). Use charts for comparisons,
+  trends, and rankings. Always include units (dollars, %, count) with numbers."
+- **Response structure by question type** — "For 'What is X?' questions, lead with the direct answer.
+  For 'Show me X', provide a brief summary then table/chart then key insights."
+- **Disclaimers** — "When answering [topic]-related questions, always append: '[disclaimer text]'."
+- **Error message style** — "When data is unavailable, explain the limitation and suggest alternatives."
+- **Chart rendering** — "Whenever data can be rendered as a chart, default to chart even if the user
+  didn't ask."
+
+Advanced: different user roles often want different response styles (e.g. analysts want SQL shown,
+business users don't). This can be handled with a role-based response instructions table + custom
+tool — see the "Dynamic Response Instructions" pattern.
 
 **Materialize gate:** none yet — continue to Phase 4.
 
-**Done when:** response instructions + sample questions are filled in.
+**Done when:** response instructions cover tone, format, error handling, and any disclaimers; sample
+questions reflect the top 3+ real questions end users will ask.
 
 ---
 
 ## Phase 4 — Agent Tools → Tool Descriptions
 
-**Goal:** Wire up the tools and their resources, then create the agent.
+**Goal:** Wire up tools and their resources, then create the agent. Tool descriptions are the **single most critical factor** for agent accuracy — agents pick tools based on name and description alone, not by inspecting your data model.
 
 Coco asks:
-- "What tools does this agent need (Cortex Analyst, Cortex Search, others)?"
-- "For each tool, what should it be used for — and explicitly NOT used for?"
-- Gate: "Should I **infer** tool descriptions/resources from the semantic view + use case, or will you **specify** them?"
+- "What tools does this agent need (Cortex Analyst, Cortex Search, custom tools)?"
+- "For each tool: what data does it access, when should the agent use it, and critically — when should
+  it NOT use it?"
+- Gate: "Should I **infer** tool descriptions from the semantic view and use case, or will you **specify** them?"
 
 Files Coco edits (in `agents/<agent_name>.yml`):
-- `tools[].tool_spec` — `type`, `name`, and a precise `description` (descriptions
-  drive routing accuracy — say what each tool does AND does not do)
-- `tool_resources` — point the Analyst tool at `<db>.<schema>.SV_<NAME>`; configure
-  Search service name/`max_results` if used
+- `tools[].tool_spec.name` — keep names short and purpose-specific; names are loaded into the LLM
+  context and influence selection
+- `tools[].tool_spec.description` — the 4-part structure that drives accuracy:
+  1. **What data it accesses** — a concise summary of what's in the semantic view or search index
+  2. **When to use it** — specific question types and scenarios with examples
+  3. **When NOT to use it** — this section is critical; without it the agent tries to use tools for
+     everything remotely related
+  4. **Data format / expectations** — units, date formats, key filter values
+- `tool_resources` — point the Analyst tool at `<db>.<schema>.SV_<NAME>`; configure Search service
+  name/`max_results` if used
+
+Common failure patterns and fixes:
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| Wrong tool selected | Vague "When to use" | Add specific examples + "When NOT to use" |
+| Parameter errors | Ambiguous inputs | Add format, examples, constraints |
+| Hallucinations | Agent using wrong tool | Tighten negative routing in description |
+
+> Use consistent terminology across all instructions and descriptions. If orchestration says
+> "customers" but the tool description says "accounts", the agent will misbehave.
+>
+> Keep the total number of tools to 5–10. Smaller, focused agents with fewer tools perform
+> faster and more reliably than large monolithic ones.
 
 **Materialize gate (run live — creates the agent):**
 ```bash
