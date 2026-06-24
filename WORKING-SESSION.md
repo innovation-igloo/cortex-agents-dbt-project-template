@@ -262,17 +262,63 @@ dbt run-operation alter_agent --args '{agent_name: <agent_name>}'
 
 ## Phase 5 — Evaluation Dataset → Eval Workflow
 
-**Goal:** Turn the confirmed questions + answers into a measurable evaluation run.
+**Goal:** Turn the confirmed questions and answers into a measurable evaluation run that produces
+scores you can track, compare, and use to drive iteration.
 
 Coco asks:
-- "We confirmed ~10 questions and their answers earlier — use those as ground truth?"
+- "We confirmed ~10 questions and answers earlier — use those as the starting golden set?"
+- "Do you want to evaluate only answer quality (AC-track), or also which tools the agent used
+  (TEA-track)? TEA-track requires you to specify which tool(s) should be called per question."
 - Gate: "Should I **infer** ground-truth answers from your data, or will you **specify** them?"
 
-Files Coco edits:
+### Understanding the metrics
+
+| Metric | Requires ground truth | What it measures |
+|---|---|---|
+| `answer_correctness` | Yes — `ground_truth_output` | How closely the agent's reply matches the expected answer. Only as good as your ground truth — invest in writing it well. |
+| `logical_consistency` | No (reference-free) | Whether the agent's reasoning chain is coherent and contradiction-free. Rewards the agent for being honest about what it doesn't know rather than fabricating an answer. |
+| `tool_selection_accuracy` | Yes — `ground_truth_invocations` | Whether the agent called the expected tools. |
+| `tool_execution_accuracy` | Yes — `ground_truth_invocations` | Whether tool calls had the right inputs/outputs. |
+
+Start with `answer_correctness` + `logical_consistency`. Add tool-track metrics once you have a
+stable agent.
+
+### Two dataset row types (tracks)
+
+- **AC-track** — `ground_truth_invocations` key absent from GROUND_TRUTH. Scores
+  `answer_correctness` + `logical_consistency` only.
+- **TEA-track** — `ground_truth_invocations` key present with expected tool call(s). Unlocks all
+  four metrics.
+- **No-tool guardrail** — `ground_truth_invocations: []` (empty list). Verifies the agent correctly
+  abstains from tool use for out-of-scope questions.
+
+Start with AC-track rows. Add TEA-track rows after Phase 4 is stable.
+
+### Writing good ground truth
+
+Treat `ground_truth_output` as a plain-language rubric for the LLM judge, not just the answer:
+- If the answer is known and stable: state it with rounding, units, tolerance
+  (`"Total was $1.2M ± 2%, rounded to nearest $100K"`)
+- If the answer changes over time: describe what a correct response should contain
+  (`"Response must state the most recent quarter's value with a date reference"`)
+- Invest in this — `answer_correctness` is only as good as the rubric you write
+
+### Designing the golden question set
+
+- Aim for 15–20 questions covering easy, medium, and hard question types
+- Mix "ground truth" rows (known answers) with "holdback" rows (no ground truth — for manual review
+  of questions where the correct answer is hard to predefine)
+- Create phrasing variations of key questions (different ways users say the same thing) to test
+  robustness — `AI_COMPLETE` can auto-generate these
+- Once the agent is live: seed the eval set from production by querying AI Observability events for
+  thumbs-up responses and using those as new ground truth rows
+
+### Files Coco edits
+
 - `seeds/eval_ground_truth.csv` — `input_query` + `ground_truth_json`
-  (JSON must be a valid object, e.g. `{"ground_truth_output": "..."}`)
-- `models/evaluations/eval_dataset.sql` — keep `PARSE_JSON(...)` so `ground_truth`
-  is **VARIANT** (do NOT use `OBJECT_CONSTRUCT`)
+  (must be valid JSON, e.g. `{"ground_truth_output": "..."}`)
+- `models/evaluations/eval_dataset.sql` — keep `PARSE_JSON(...)` so `ground_truth` is **VARIANT**
+  (do NOT switch to `OBJECT_CONSTRUCT`)
 - `evaluations/<config>.yml` — set `dataset.table_name` to `<db>.<schema>.EVAL_DATASET`
   and `agent_params.agent_name` to `<AGENT_NAME>`
 
@@ -283,7 +329,37 @@ dbt run --select eval_dataset
 dbt run-operation run_evaluation --args '{agent_name: <agent_name>, run_name: <run_name>, config_file: <config>.yml}'
 ```
 
-**Done when:** the evaluation run starts and returns scores.
+Check run status at any time:
+```sql
+CALL EXECUTE_AI_EVALUATION('STATUS', {'run_name': '<run_name>'}, NULL);
+```
+
+Retrieve scores after completion:
+```sql
+SELECT * FROM TABLE(SNOWFLAKE.LOCAL.GET_AI_EVALUATION_DATA(
+  '<db>', '<schema>', '<AGENT_NAME>', 'CORTEX AGENT', '<run_name>'
+));
+```
+
+### Interpreting scores and iterating
+
+| Score pattern | Likely cause | Fix |
+|---|---|---|
+| Low `answer_correctness` | Weak ground truth rubric, or wrong tool selected | Improve ground truth wording; check tool descriptions |
+| Low `logical_consistency` | Agent reasoning contradicts itself or instructions | Tighten orchestration instructions; reduce instruction length |
+| Low tool accuracy | Tool descriptions too vague | Sharpen "When to use" / "When NOT to use" in Phase 4 |
+| High `logical_consistency`, low `answer_correctness` | Agent is honest about limits but not finding the answer | Improve semantic view coverage, add verified queries |
+
+Iteration loop: **inspect trace → diagnose root cause → fix the right layer → re-run**. Use
+`GET_AI_RECORD_TRACE()` to see exactly where the agent went wrong. Start fixes with tool
+descriptions — they are the highest-leverage lever.
+
+> `logical_consistency` passes the full agent trace to the LLM judge. For agents with very long
+> traces, this can hit context window limits. If you see context-window errors, reduce the dataset
+> size or run `answer_correctness` alone first.
+
+**Done when:** scores are returned and you can identify the lowest-scoring questions to drive
+the next improvement cycle.
 
 ---
 
