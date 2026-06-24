@@ -89,13 +89,39 @@ Files Coco edits:
   3. `FACTS` — row-level expressions metrics aggregate over (must precede `DIMENSIONS`/`METRICS`)
   4. `DIMENSIONS` — filterable/groupable attributes
   5. `METRICS` — aggregate measures (SUM, COUNT, AVG, etc.)
-  6. `AI_SQL_GENERATION` — business rules for SQL generation (e.g. default date handling, rounding conventions)
-  7. `AI_QUESTION_CATEGORIZATION` — guardrails for out-of-scope questions (e.g. reject HR or PII queries)
+  6. `AI_SQL_GENERATION` — **how** the agent writes SQL: encode domain conventions the LLM cannot
+     infer from column names alone. Keep instructions specific and concise — over-prompting degrades
+     accuracy and increases token cost. Start minimal and add rules only when you observe failures.
+
+     Good candidates:
+     - Default time filters ("if no date is specified, return the last 30 days")
+     - Fiscal calendar offsets ("our fiscal year starts in February")
+     - Formatting rules ("round all currency to 2 decimal places")
+     - Domain classification logic ("classify stock as CRITICAL <10, LOW 10–24, OK 25+")
+     - Enum casing or encoding quirks ("region values are always uppercase")
+
+  7. `AI_QUESTION_CATEGORIZATION` — **what to do with a question** before SQL is even attempted.
+     This fires before SQL generation and is completely independent — adding it does not change
+     your `AI_SQL_GENERATION` instructions at all (they are additive modules).
+
+     Good candidates:
+     - Reject out-of-scope topics ("Reject questions about employee data. Ask the user to contact HR.")
+     - Table routing when multiple unrelated tables share the view ("If the question is about
+       inventory, query the inventory table. If about sales, query the orders table.")
+     - Ask for clarification on ambiguous questions ("If no product type is specified, mark the
+       question UNCLEAR and ask the user to specify product_type.")
+     - Special encoding guardrails ("entity names with apostrophes must use doubled single
+       quotes '' in SQL — backslash escaping is not valid in Snowflake")
+
   8. `AI_VERIFIED_QUERIES` — confirmed Q&A pairs that seed the agent's onboarding questions
 
 Coco asks for `AI_SQL_GENERATION` and `AI_QUESTION_CATEGORIZATION` content explicitly:
-- "What SQL generation rules should always apply (e.g. default to most recent date, round currency to 2 decimals)?"
-- "What question categories are out of scope and should be rejected?"
+- "What SQL formatting or domain conventions should always apply? (e.g. fiscal calendar, rounding, default date range)"
+- "Are there question types that should be rejected, routed to a specific table, or require clarification before the agent attempts SQL?"
+- Gate: "Should I infer these rules from your data and questions, or will you specify them?"
+
+> Both clauses are optional and additive — use neither, one, or both. Start with what you know
+> is wrong today; add more rules as you discover gaps during testing.
 
 **Materialize gate (run live):**
 ```bash
