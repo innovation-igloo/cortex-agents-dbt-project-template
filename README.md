@@ -132,6 +132,8 @@ snow dbt execute cortex_lifecycle \
 
 ## Workflow
 
+> **Running a guided build session?** See [`WORKING-SESSION.md`](WORKING-SESSION.md) — a phase-driven runbook you (or Cortex Code) can follow to build the agent end-to-end.
+
 ```
 1. Define Sources ──> 2. Build Staging ──> 3. Create Semantic View ──> 4. Deploy Agent
                                                                             │
